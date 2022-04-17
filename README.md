@@ -16,13 +16,12 @@ This project is built to comprehensively learn about .Net Core 5;
 - Install framework
 
 ```bash
-$ dotnet install
-$ 
+$ dotnet build
 ```
 
 ## Debugging Tools
 
-Untuk non production environment, aktifkan `APP_DEBUG` menjadi `true` agar exception dapat ditampilkan.
+Up to you depends on IDE you are using.
 
 ## Development Guide
 

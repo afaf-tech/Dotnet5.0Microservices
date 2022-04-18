@@ -45,7 +45,25 @@ namespace Play.Inventory.Service
                         .LogWarning($"Delaying for {timespan.TotalSeconds} seconds, then making retry {retryAttempt}");
                 }
             ))
+            // Circuit Breaker prevents client to call Catalog Service continuosly when already calling n retry
+            // and automatically send again after n seconds for next call from client endpoint
+            .AddTransientHttpErrorPolicy(builder => builder.Or<TimeoutRejectedException>().CircuitBreakerAsync(
+                3,
+                TimeSpan.FromSeconds(15),
+                onBreak: (outcome, timespan) => {
+                    var serviceProvider = services.BuildServiceProvider();
+                    serviceProvider.GetService<ILogger<CatalogClient>>() ? 
+                        .LogWarning($"Opening the circuit for {timespan.TotalSeconds} seconds");
+                },
+                onReset: () => {
+                    var serviceProvider = services.BuildServiceProvider();
+                    serviceProvider.GetService<ILogger<CatalogClient>>() ? 
+                        .LogWarning($"Closing the circuit...");
+
+                }
+            ))
             .AddPolicyHandler(Policy.TimeoutAsync<HttpResponseMessage>(1));
+
                     
             services.AddControllers();
             services.AddSwaggerGen(c =>

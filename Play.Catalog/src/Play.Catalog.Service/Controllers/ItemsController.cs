@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using MassTransit;
 using Microsoft.AspNetCore.Mvc;
+using Play.Catalog.Contracts;
 using Play.Catalog.Service;
 using Play.Catalog.Service.Dtos;
 using Play.Catalog.Service.Entities;
@@ -16,33 +18,42 @@ namespace Play.Catalog.Services.Controllers {
     public class ItemsController : Controller {
 
         private readonly IRepository<Item> _itemsRepository;
-        private static int requestCounter = 0;
+        private readonly IPublishEndpoint _publishEndpoint;
 
-        public ItemsController(IRepository<Item> itemsRepository){
+        public ItemsController(IRepository<Item> itemsRepository, IPublishEndpoint publishEndpoint){
             this._itemsRepository = itemsRepository;
+            this._publishEndpoint = publishEndpoint;
         }
 
         [HttpGet]
         public async Task<ActionResult<IEnumerable<ItemDto>>> GetAsync(){
-
-            requestCounter++;
-            Console.WriteLine($"Request {requestCounter}: starting");
-            if(requestCounter <= 2){
-                Console.WriteLine($"Request {requestCounter}: Delaying...");
-                await Task.Delay(TimeSpan.FromSeconds(10));
-            }
-            if(requestCounter <= 4){
-                Console.WriteLine($"Request {requestCounter}:  500 (Internal Server Error)...");
-                await Task.Delay(TimeSpan.FromSeconds(10));
-                return StatusCode(500);
-            }
-            
             var items = (await _itemsRepository.GetAllAsync())
                         .Select(item => item.AsDto());
-            Console.WriteLine($"Request {requestCounter}:  200 (Ok)...");
 
             return Ok(items);
         }
+        // Code Example for Syncronous Integration to provide error result
+        // [HttpGet]
+        // public async Task<ActionResult<IEnumerable<ItemDto>>> GetAsync(){
+
+        //     requestCounter++;
+        //     Console.WriteLine($"Request {requestCounter}: starting");
+        //     if(requestCounter <= 2){
+        //         Console.WriteLine($"Request {requestCounter}: Delaying...");
+        //         await Task.Delay(TimeSpan.FromSeconds(10));
+        //     }
+        //     if(requestCounter <= 4){
+        //         Console.WriteLine($"Request {requestCounter}:  500 (Internal Server Error)...");
+        //         await Task.Delay(TimeSpan.FromSeconds(10));
+        //         return StatusCode(500);
+        //     }
+            
+        //     var items = (await _itemsRepository.GetAllAsync())
+        //                 .Select(item => item.AsDto());
+        //     Console.WriteLine($"Request {requestCounter}:  200 (Ok)...");
+
+        //     return Ok(items);
+        // }
 
         [HttpGet("{id}")]
         public async Task<ActionResult<ItemDto>> GetByIdAsync(Guid id) {
@@ -63,6 +74,8 @@ namespace Play.Catalog.Services.Controllers {
 
             await _itemsRepository.CreateAsync(item);
 
+            await _publishEndpoint.Publish(new CatalogItemCreated(item.Id, item.Name, item.Description));
+
             return CreatedAtAction(nameof(GetByIdAsync), new {id = item.Id}, item);
         }
 
@@ -79,6 +92,8 @@ namespace Play.Catalog.Services.Controllers {
 
             await _itemsRepository.UpdateAsync(existingItem);
 
+            await _publishEndpoint.Publish(new CatalogItemUpdated(existingItem.Id, existingItem.Name, existingItem.Description));
+
             return NoContent();
         }
 
@@ -88,6 +103,8 @@ namespace Play.Catalog.Services.Controllers {
             var item = _itemsRepository.GetAsync(id);
             if(item == null) return NotFound();
             await _itemsRepository.RemoveAsync(id);
+            
+            await _publishEndpoint.Publish(new CatalogItemDeleted(id));
 
             return NoContent();
         }
